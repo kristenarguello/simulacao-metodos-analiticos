@@ -18,6 +18,14 @@ import matplotlib.pyplot as plt
 
 
 def pseudo_random_generator(seed, a, c, m, n=1000):
+    """"
+    seed: previous generated random number
+    a: multiplier
+    c: increment
+    m: modulo
+    n: number of random numbers to generate (default 1000)
+    """
+
     pseudos = []
     pseudo = seed
     for i in range(n):
