@@ -1,4 +1,4 @@
-SERVIDORES = 2
+SERVIDORES = 1
 CAPACIDADE = 5
 PRIMEIRA_CHEGADA = 2
 ARRIVAL_MIN = 2
@@ -6,7 +6,7 @@ ARRIVAL_MAX = 5
 SERVICE_MIN = 3
 SERVICE_MAX = 5  # TODO: esses min e max nao tao sendo usados, deveriam ser usados no pseudo random generator.... mas nao 'e o que o pseudo no moodle mostra
 
-COUNT = 100000  # quantidade de números a serem utilizados na simulação
+COUNT = 10  # quantidade de números a serem utilizados na simulação
 
 FILA = 0
 TEMPO_GLOBAL = 0
@@ -113,6 +113,10 @@ def chegada(evento: dict):
     agendar("chegada")
 
 
+def passagem(evento: dict):
+    pass
+
+
 def calcular_tempo_estados(tempo_evento: float):
     """
     calcula o delta tempo do último estado
@@ -146,20 +150,18 @@ def main():
             chegada(event)
         elif event["type"] == "saida":
             saida(event)
-
-    printar_terminal()
+        elif event["type"] == "passagem":
+            pass
 
 
 def probabilities():
     for i in range(CAPACIDADE + 1):
-        print(
-            f"Probabilidade de {i} clientes na fila: {(TEMPOS[i] / TEMPO_GLOBAL):.3f}"
-        )
+        print(f"Probabilidade de {i} clientes na fila: {TEMPOS[i] / TEMPO_GLOBAL}")
 
 
 def tempos_acumulados():
     for i in range(CAPACIDADE + 1):
-        print(f"Tempo acumulado de {i} clientes na fila: {TEMPOS[i]:.3f}")
+        print(f"Tempo acumulado de {i} clientes na fila: {TEMPOS[i]}")
 
 
 def printar_terminal():
@@ -178,9 +180,10 @@ def printar_terminal():
     tempos_acumulados()
     print("\nProbabilidades:")
     probabilities()
-    print(f"\nTempo global: {TEMPO_GLOBAL:.3f}")
+    print(f"\nTempo global: {TEMPO_GLOBAL}")
     print(f"\nPerda: {PERDA}")
 
 
 if __name__ == "__main__":
     main()
+    printar_terminal()
