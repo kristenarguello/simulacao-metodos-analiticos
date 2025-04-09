@@ -54,13 +54,13 @@ def chegada(fila: Fila, evento: Evento, escalonador: Escalonador):
             )
     else:
         fila.loss()
-        escalonador.add(
-            Evento(
-                tipo="chegada",
-                tempo=evento.tempo,
-                aleatorio=next_r(fila.min_arrival, fila.max_arrival),
-            )
+    escalonador.add(
+        Evento(
+            tipo="chegada",
+            tempo=evento.tempo,
+            aleatorio=next_r(fila.min_arrival, fila.max_arrival),
         )
+    )
 
 
 def saida(fila: Fila, evento: Evento, escalonador: Escalonador):
