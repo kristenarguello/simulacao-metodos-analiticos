@@ -1,6 +1,7 @@
 class Fila:
     def __init__(
         self,
+        id: int,
         servers: int,
         capacity: int,
         min_arrival: float,
@@ -26,6 +27,7 @@ class Fila:
         max_service : float
             Tempo maximo de servico.
         """
+        self.id = id
         self.servers = servers
         self.capacity = capacity
         self.min_arrival = min_arrival

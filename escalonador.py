@@ -1,3 +1,5 @@
+from typing import Optional
+
 from evento import Evento
 
 
@@ -10,7 +12,7 @@ class Escalonador:
         self.eventos.append(evento)
         self.eventos.sort(key=lambda ev: ev.tempo)
 
-    def next_event(self):
+    def next_event(self) -> Optional[Evento]:
         if len(self.eventos) == 0:
             return None
 
