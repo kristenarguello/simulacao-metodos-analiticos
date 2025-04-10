@@ -80,7 +80,7 @@ class Fila:
             self.customers -= 1
 
     def contabiliza_tempo(self, tempo: float):
-        self.times[self.capacity] += tempo
+        self.times[self.status()] += tempo
 
     def __repr__(self):
         """

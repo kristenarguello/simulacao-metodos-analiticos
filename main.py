@@ -128,7 +128,7 @@ def main(
     escalonador.add(
         Evento(
             tipo="chegada",
-            tempo=2,
+            tempo=1.5,
             aleatorio=0.0,
             fila=1,
         )
@@ -171,12 +171,28 @@ def main(
             passagem(evento, fila_1, fila_2, escalonador)
 
     # Exibe os resultados
-    print(f"Fila 1: {fila_1.status()} clientes na fila")
-    print(f"Fila 2: {fila_2.status()} clientes na fila")
     print(f"Fila 1: {fila_1.losses} perdas na fila")
     print(f"Fila 2: {fila_2.losses} perdas na fila")
-    print("Temp de simulação: ", TEMPO_GLOBAL)
-    print("Probabilidades de estado da fila 1:")
+    print("Tempo de simulação: ", TEMPO_GLOBAL)
+
+    for i in range(fila_1.capacity + 1):
+        print(
+            f"Probabilidade de {i} clientes na fila 1: {fila_1.times[i] / TEMPO_GLOBAL}"
+        )
+    for i in range(fila_2.capacity + 1):
+        print(
+            f"Probabilidade de {i} clientes na fila 2: {fila_2.times[i] / TEMPO_GLOBAL}"
+        )
+
+    for i in range(fila_1.capacity + 1):
+        print(
+            f"Tempo acumulado de {i} clientes na fila 1: {fila_1.times[i]}",
+        )
+
+    for i in range(fila_2.capacity + 1):
+        print(
+            f"Tempo acumulado de {i} clientes na fila 2: {fila_2.times[i]}",
+        )
 
 
 if __name__ == "__main__":
