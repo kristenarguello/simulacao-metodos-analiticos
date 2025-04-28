@@ -36,7 +36,6 @@ def chegada(evento: Evento, filas, escalonador: Escalonador, network):
     fila: Fila = filas[evento.fila]
 
     acumula_tempo(filas, evento.tempo)
-
     TEMPO_GLOBAL = evento.tempo
 
     if fila.tem_espaco():
@@ -53,11 +52,11 @@ def chegada(evento: Evento, filas, escalonador: Escalonador, network):
         fila.losses += 1
 
     # Agenda próxima chegada
-    arrival_rate = fila.min_arrival + (fila.max_arrival - fila.min_arrival) * next_rnd()
+    # arrival_rate = fila.min_arrival + (fila.max_arrival - fila.min_arrival) * next_rnd()
     escalonador.add(
         Evento(
             tipo="chegada",
-            tempo=TEMPO_GLOBAL + arrival_rate,
+            tempo=TEMPO_GLOBAL,
             aleatorio=next_rnd(),
             fila=evento.fila,
         )
@@ -98,11 +97,12 @@ def passagem(evento: Evento, filas, escalonador, network):
             proxima_fila.losses += 1
 
 
+# TODO: THIS IS WRONG!!!!
 def sorteia_destino(network, origem) -> int:
     if origem not in network:
         raise ValueError(f"Origem {origem} não encontrada na rede.")
     destinos = network[origem]
-    x = next_rnd()
+    x = next_rnd()  # NEED TO CHANGE THIS
     soma = 0
     for destino, prob in destinos:
         soma += prob
