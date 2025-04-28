@@ -78,7 +78,12 @@ def passagem(evento: Evento, filas, escalonador, network):
     # Verifica pra onde vai de acordo com as probabilidades
     destino = sorteia_destino(network, evento.fila)
     if destino:
+        if destino not in filas:
+            saida(evento, filas, escalonador)
+            return
+
         proxima_fila: Fila = filas[destino]
+
         if proxima_fila.tem_espaco():
             proxima_fila.add_cliente()
             escalonador.add(

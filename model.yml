@@ -31,7 +31,7 @@ arrivals:
 queues: 
    Q1: 
       servers: 1
-      capacity: 9999  # Sem limite na primeira fila
+      capacity: 10  # Sem limite na primeira fila
       minArrival: 2.0
       maxArrival: 4.0
       minService: 1.0
