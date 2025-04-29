@@ -252,7 +252,9 @@ def main(config):
         fila = filas[name]
         print(f"Fila {name}: {fila.losses} perdas na fila")
         print(f"Tempo de simulação: {TEMPO_GLOBAL}")
-        for i in range(fila.capacity + 1):
+        for i in range(11):
+            if i >= len(fila.times):
+                break
             print(f"Probabilidade de {i} clientes: {fila.times[i] / TEMPO_GLOBAL}")
 
 
