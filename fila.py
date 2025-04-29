@@ -1,6 +1,3 @@
-from collections import deque
-
-
 class Fila:
     def __init__(
         self,

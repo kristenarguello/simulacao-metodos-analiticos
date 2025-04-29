@@ -1,5 +1,6 @@
 import argparse
 import random
+
 import yaml
 
 from escalonador import Escalonador
@@ -31,7 +32,11 @@ def acumula_tempo(filas, current_time: float):
         fila.acumula_tempo(current_time)
 
 
-def chegada(evento: Evento, filas, escalonador: Escalonador, network):
+def chegada(
+    evento: Evento,
+    filas,
+    escalonador: Escalonador,
+):
     global TEMPO_GLOBAL
     fila: Fila = filas[evento.fila]
 
@@ -44,7 +49,6 @@ def chegada(evento: Evento, filas, escalonador: Escalonador, network):
             Evento(
                 tipo="passagem",
                 tempo=next_service_time(fila),
-                aleatorio=next_rnd(),
                 fila=evento.fila,
             )
         )
@@ -52,62 +56,75 @@ def chegada(evento: Evento, filas, escalonador: Escalonador, network):
         fila.losses += 1
 
     # Agenda próxima chegada
-    # arrival_rate = fila.min_arrival + (fila.max_arrival - fila.min_arrival) * next_rnd()
     escalonador.add(
         Evento(
             tipo="chegada",
-            tempo=TEMPO_GLOBAL,
-            aleatorio=next_rnd(),
+            tempo=next_service_time(fila),
             fila=evento.fila,
         )
     )
 
 
-def passagem(evento: Evento, filas, escalonador, network):
+def passagem(evento: Evento, filas, escalonador: Escalonador, network):
     global TEMPO_GLOBAL
-    fila_atual: Fila = filas[evento.fila]
+    fila_atual = filas[evento.fila]
 
     acumula_tempo(filas, evento.tempo)
     TEMPO_GLOBAL = evento.tempo
 
-    cliente = fila_atual.remove_cliente()
-    if cliente is None:
+    # terminou um serviço
+    fila_atual.remove_cliente()
+
+    # se ainda sobra gente na fila além dos servidores em ação,
+    # significa que alguém estava esperando e entra em serviço agora
+    if fila_atual.customers >= fila_atual.servers:
+        escalonador.add(
+            Evento(
+                tipo="passagem",
+                tempo=next_service_time(fila_atual),
+                fila=fila_atual.id,
+            )
+        )
+
+    # roteamento do cliente que acabou de sair dessa fila
+    destino = sorteia_destino(network, fila_atual.id)
+
+    fila_dest = filas[destino]
+    if not fila_dest.add_cliente():  # perda no destino
         return
 
-    # Verifica pra onde vai de acordo com as probabilidades
-    destino = sorteia_destino(network, evento.fila)
-    if destino:
-        if destino not in filas:
-            saida(evento, filas, escalonador)
-            return
+    if destino.startswith("sa"):
+        escalonador.add(
+            Evento(
+                tipo="saida",
+                tempo=next_service_time(fila_atual),
+                fila=fila_atual,
+            ),
+        )
 
-        proxima_fila: Fila = filas[destino]
-
-        if proxima_fila.tem_espaco():
-            proxima_fila.add_cliente()
-            escalonador.add(
-                Evento(
-                    tipo="passagem",
-                    tempo=next_service_time(proxima_fila),
-                    aleatorio=next_rnd(),
-                    fila=destino,
-                )
+    if fila_dest.customers <= fila_dest.servers:
+        escalonador.add(
+            Evento(
+                tipo="passagem",
+                tempo=next_service_time(fila_dest),
+                fila=destino,
             )
-        else:
-            proxima_fila.losses += 1
+        )
 
 
-# TODO: THIS IS WRONG!!!!
-def sorteia_destino(network, origem) -> int:
+def sorteia_destino(network, origem) -> str:
     if origem not in network:
         raise ValueError(f"Origem {origem} não encontrada na rede.")
     destinos = network[origem]
-    x = next_rnd()  # NEED TO CHANGE THIS
-    soma = 0
+    x = random.uniform(0, 1)  # TODO: make sure of this
+
+    soma = 0.0
     for destino, prob in destinos:
-        soma += prob
-        if x <= soma:
+        if x < soma:
             return destino
+        else:
+            soma += prob
+
     raise ValueError(
         f"Erro ao sortear destino: soma das probabilidades {soma} não é igual a 1."
     )
@@ -174,22 +191,33 @@ def main(config):
             Evento(
                 tipo="chegada",
                 tempo=chegada_tempo,
-                aleatorio=next_rnd(),
                 fila=fila_nome,
             )
         )
     try:
         while True:
             evento = escalonador.next_event()
+            # only queues 2 and 3 can have saida events
+            # queue one
+
             if evento is None:
                 print("Fim da simulação")
                 break
 
             if evento.tipo == "chegada":
-                chegada(evento, filas, escalonador, network)
+                chegada(
+                    evento,
+                    filas,
+                    escalonador,
+                )
 
-            elif evento.tipo == "passagem":
-                passagem(evento, filas, escalonador, network)
+            elif evento.tipo == "passagem":  # # make sure the events are
+                passagem(
+                    evento,
+                    filas,
+                    escalonador,
+                    network,
+                )
 
             elif evento.tipo == "saida":
                 saida(evento, filas, escalonador)
