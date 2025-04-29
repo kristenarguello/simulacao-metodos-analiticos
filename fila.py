@@ -55,7 +55,7 @@ class Fila:
         """Retorna True se ainda houver espaço na fila."""
         return self.customers < self.capacity
 
-    def add_cliente(self) -> None:
+    def add_cliente(self) -> bool:
         """
         Insere um cliente na fila (se houver espaço) e conta perda se não couber.
 
@@ -67,8 +67,10 @@ class Fila:
         if self.tem_espaco():
             # self.queue.append(cliente)
             self.customers += 1
+            return True
         else:
             self.losses += 1
+            return False
 
     def remove_cliente(self):
         """

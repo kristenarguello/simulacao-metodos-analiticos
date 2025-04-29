@@ -10,11 +10,10 @@ from fila import Fila
 TEMPO_GLOBAL = 0.0
 rndnumbers = []
 rnd_idx = 0
-
 random_limit = 0
 
 
-def next_rnd():
+def next_rnd() -> float:
     global rnd_idx
     if rnd_idx >= len(rndnumbers):
         print(
@@ -26,19 +25,21 @@ def next_rnd():
     return r
 
 
-def acumula_tempo(filas, current_time: float):
-    lista_filas: list[Fila] = list(filas.values())
-    for fila in lista_filas:
+def acumula_tempo(
+    filas: dict[str, Fila],
+    current_time: float,
+):
+    for fila in filas.values():
         fila.acumula_tempo(current_time)
 
 
 def chegada(
     evento: Evento,
-    filas,
+    filas: dict[str, Fila],
     escalonador: Escalonador,
 ):
     global TEMPO_GLOBAL
-    fila: Fila = filas[evento.fila]
+    fila = evento.fila
 
     acumula_tempo(filas, evento.tempo)
     TEMPO_GLOBAL = evento.tempo
@@ -65,9 +66,14 @@ def chegada(
     )
 
 
-def passagem(evento: Evento, filas, escalonador: Escalonador, network):
+def passagem(
+    evento: Evento,
+    filas: dict[str, Fila],
+    escalonador: Escalonador,
+    network: dict[str, list[tuple[str, float]]],
+):
     global TEMPO_GLOBAL
-    fila_atual = filas[evento.fila]
+    fila_atual = filas[evento.fila.id]
 
     acumula_tempo(filas, evento.tempo)
     TEMPO_GLOBAL = evento.tempo
@@ -82,16 +88,16 @@ def passagem(evento: Evento, filas, escalonador: Escalonador, network):
             Evento(
                 tipo="passagem",
                 tempo=next_service_time(fila_atual),
-                fila=fila_atual.id,
+                fila=fila_atual,
             )
         )
 
     # roteamento do cliente que acabou de sair dessa fila
-    destino = sorteia_destino(network, fila_atual.id)
-
-    fila_dest = filas[destino]
-    if not fila_dest.add_cliente():  # perda no destino
-        return
+    destino = sorteia_destino(
+        network=network,
+        filas=filas,
+        origem=fila_atual,
+    )
 
     if destino.startswith("sa"):
         escalonador.add(
@@ -101,38 +107,50 @@ def passagem(evento: Evento, filas, escalonador: Escalonador, network):
                 fila=fila_atual,
             ),
         )
+    else:
+        destino = filas[destino]
+        if not destino.add_cliente():  # perda no destino
+            return
 
-    if fila_dest.customers <= fila_dest.servers:
-        escalonador.add(
-            Evento(
-                tipo="passagem",
-                tempo=next_service_time(fila_dest),
-                fila=destino,
+        if destino.customers <= destino.servers:
+            escalonador.add(
+                Evento(
+                    tipo="passagem",
+                    tempo=next_service_time(destino),
+                    fila=destino,
+                )
             )
-        )
 
 
-def sorteia_destino(network, origem) -> str:
-    if origem not in network:
-        raise ValueError(f"Origem {origem} não encontrada na rede.")
-    destinos = network[origem]
-    x = random.uniform(0, 1)  # TODO: make sure of this
+def sorteia_destino(
+    network: dict[str, list[tuple[str, float]]],
+    filas: dict[str, Fila],
+    origem: Fila,
+) -> str:
+    if network.get(origem.id) is None:
+        raise ValueError(f"Fila {origem.id} não tem destinos definidos.")
+
+    destinos = network[origem.id]
+    prob = random.uniform(0.0, 1.0)
 
     soma = 0.0
-    for destino, prob in destinos:
-        if x < soma:
+    for destino, f_prob in destinos:
+        soma += f_prob
+        if prob < soma:
             return destino
-        else:
-            soma += prob
 
     raise ValueError(
-        f"Erro ao sortear destino: soma das probabilidades {soma} não é igual a 1."
+        f"Erro ao sortear destino: soma das probabilidades {soma} não é 1.0 ou número aleatório {prob} fora de faixa"
     )
 
 
-def saida(evento, filas, escalonador):
+def saida(
+    evento: Evento,
+    filas: dict[str, Fila],
+    escalonador: Escalonador,
+):
     global TEMPO_GLOBAL
-    fila: Fila = filas[evento.fila]
+    fila: Fila = filas[evento.fila.id]
 
     acumula_tempo(filas, evento.tempo)
 
@@ -148,9 +166,8 @@ def next_service_time(fila: Fila):
 
 def main(config):
     global rndnumbers
-
-    filas = {}
-    network = {}
+    filas: dict[str, Fila] = {}
+    network: dict[str, list[tuple[str, float]]] = {}  # origin, [target, prob]
 
     # Pré-processa números aleatórios
     if "seeds" in config:
@@ -191,7 +208,7 @@ def main(config):
             Evento(
                 tipo="chegada",
                 tempo=chegada_tempo,
-                fila=fila_nome,
+                fila=filas[fila_nome],
             )
         )
     try:
@@ -206,29 +223,34 @@ def main(config):
 
             if evento.tipo == "chegada":
                 chegada(
-                    evento,
-                    filas,
-                    escalonador,
+                    evento=evento,
+                    filas=filas,
+                    escalonador=escalonador,
                 )
 
             elif evento.tipo == "passagem":  # # make sure the events are
                 passagem(
-                    evento,
-                    filas,
-                    escalonador,
-                    network,
+                    evento=evento,
+                    filas=filas,
+                    escalonador=escalonador,
+                    network=network,
                 )
 
             elif evento.tipo == "saida":
-                saida(evento, filas, escalonador)
+                saida(
+                    evento=evento,
+                    filas=filas,
+                    escalonador=escalonador,
+                )
     except ValueError as e:
         print(f"Erro: {e}")
     except StopIteration:
         print("Quantidade de números aleatórios finalizada.")
 
     # Impressão dos resultados
-    for nome, fila in filas.items():
-        print(f"Fila {nome}: {fila.losses} perdas na fila")
+    for name in filas:
+        fila = filas[name]
+        print(f"Fila {name}: {fila.losses} perdas na fila")
         print(f"Tempo de simulação: {TEMPO_GLOBAL}")
         for i in range(fila.capacity + 1):
             print(f"Probabilidade de {i} clientes: {fila.times[i] / TEMPO_GLOBAL}")
