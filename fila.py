@@ -1,31 +1,33 @@
 class Fila:
     def __init__(
         self,
-        id: int,
+        id: str,
         servers: int,
         capacity: int,
-        min_arrival: float,
-        max_arrival: float,
-        min_service: float,
-        max_service: float,
+        min_arrival: float = 0.0,
+        max_arrival: float = 0.0,
+        min_service: float = 0.0,
+        max_service: float = 0.0,
     ):
         """
         Classe que representa uma fila em um sistema de eventos discretos.
 
-        Parametros
+        Parâmetros
         ----------
-        server : int
-            Numero de servidores da fila.
+        id : str
+            Identificador único da fila.
+        servers : int
+            Número de servidores da fila (para simulações futuras).
         capacity : int
-            Capacidade maxima (tamanho) da fila.
+            Capacidade máxima (tamanho) da fila.
         min_arrival : float
-            Tempo minimo entre chegadas de clientes.
+            Tempo mínimo entre chegadas de clientes.
         max_arrival : float
-            Tempo maximo entre chegadas de clientes.
+            Tempo máximo entre chegadas de clientes.
         min_service : float
-            Tempo minimo de servico.
+            Tempo mínimo de serviço.
         max_service : float
-            Tempo maximo de servico.
+            Tempo máximo de serviço.
         """
         self.id = id
         self.servers = servers
@@ -35,56 +37,66 @@ class Fila:
         self.min_service = min_service
         self.max_service = max_service
 
+        # Armazena clientes em espera (FIFO)
+        # self.queue = deque()
+        # Tempo da última atualização para cálculo de médias
+        self.last_time = 0.0
+        # Contadores de estado
+        self.customers = 0  # Número atual de clientes
+        self.losses = 0  # Clientes perdidos por fila cheia
+        # Acumula tempo em cada estado (0..capacity)
         self.times = [0.0] * (capacity + 1)
 
-        # Contadores de estado
-        self.customers = 0  # Número atual de clientes na fila
-        self.losses = 0  # Número de clientes perdidos (se fila cheia)
-
     def status(self) -> int:
+        """Retorna o número de clientes na fila."""
         return self.customers
 
-    # =============
-    # SETTERS / PROCEDIMENTOS
-    # =============
-    def loss(self) -> int:
-        """
-        (int) Loss():
-        Incrementa a propriedade Loss (perdas) em uma unidade,
-        contabilizando mais uma perda (quando a fila ja estava cheia).
+    def tem_espaco(self) -> bool:
+        """Retorna True se ainda houver espaço na fila."""
+        return self.customers < self.capacity
 
-        Retorna o valor atualizado de Loss.
+    def add_cliente(self) -> bool:
         """
-        self.losses += 1
-        return self.losses
+        Insere um cliente na fila (se houver espaço) e conta perda se não couber.
 
-    def in_(self) -> None:
+        Parâmetros
+        ----------
+        cliente : qualquer
+            Identificador ou objeto do cliente.
         """
-        (void) In():
-        Incrementa a propriedade Customers em uma unidade, contabilizando que
-        chegou um cliente na fila. Se a fila estiver cheia, conta como perda.
-        """
-        if self.customers < self.capacity:
+        if self.tem_espaco():
+            # self.queue.append(cliente)
             self.customers += 1
+            return True
         else:
-            # Se a fila estiver no limite, incrementa perda.
-            self.loss()
+            self.losses += 1
+            return False
 
-    def out(self) -> None:
+    def remove_cliente(self):
         """
-        (void) Out():
-        Decrementa a propriedade Customers em uma unidade, contabilizando que
-        um cliente saiu da fila (atendimento finalizado ou abandono).
+        Remove (e retorna) o cliente que está há mais tempo na fila.
+        Se a fila estiver vazia, retorna None.
         """
         if self.customers > 0:
+            # cliente = self.queue.popleft()
             self.customers -= 1
+            return 1
+            # return cliente
+        return None
 
-    def contabiliza_tempo(self, tempo: float):
-        self.times[self.status()] += tempo
+    def acumula_tempo(self, current_time: float) -> None:
+        """
+        Atualiza o acumulador de tempo no estado atual (n clientes) desde
+        a última chamada.
+
+        Parâmetros
+        ----------
+        current_time : float
+            Horário do evento que disparou esta atualização.
+        """
+        delta = current_time - self.last_time
+        self.times[self.customers] += delta
+        self.last_time = current_time
 
     def __repr__(self):
-        """
-        Retorna uma representacao em string da Fila,
-        util para debug ou logs.
-        """
-        return ""
+        return f"Fila(id={self.id!r}, customers={self.customers}, losses={self.losses})"

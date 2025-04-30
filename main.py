@@ -1,289 +1,299 @@
 import argparse
+import random
+
+import yaml
 
 from escalonador import Escalonador
 from evento import Evento
 from fila import Fila
 
 TEMPO_GLOBAL = 0.0
+rndnumbers = []
+rnd_idx = 0
+random_limit = 0
 
 
-def acumula_tempo(evento: Evento, f: Fila):
+def next_rnd() -> float:
+    global rnd_idx
+    if rnd_idx >= len(rndnumbers):
+        print(
+            "⚠️  Todos os números aleatórios foram consumidos. Encerrando simulação..."
+        )
+        raise StopIteration
+    r = rndnumbers[rnd_idx]
+    rnd_idx += 1
+    return r
+
+
+def acumula_tempo(
+    filas: dict[str, Fila],
+    current_time: float,
+):
+    for fila in filas.values():
+        fila.acumula_tempo(current_time)
+
+
+def chegada(
+    evento: Evento,
+    filas: dict[str, Fila],
+    escalonador: Escalonador,
+):
     global TEMPO_GLOBAL
-    f.contabiliza_tempo(evento.tempo - TEMPO_GLOBAL)
+    fila = evento.fila
+
+    acumula_tempo(filas, evento.tempo)
     TEMPO_GLOBAL = evento.tempo
 
-
-def passagem(evento: Evento, f1: Fila, f2: Fila, escalonador: Escalonador):
-    global TEMPO_GLOBAL
-
-    acumula_tempo(evento, f1)
-    acumula_tempo(evento, f2)
-
-    f1.out()
-    if f1.status() >= f1.servers:
+    if fila.tem_espaco():
+        fila.add_cliente()
         escalonador.add(
             Evento(
                 tipo="passagem",
-                tempo=TEMPO_GLOBAL,
-                aleatorio=next_r(f1.min_service, f1.max_service),
-                fila=1,
+                tempo=next_service_time(fila),
+                fila=evento.fila,
             )
         )
-    if f2.status() < f2.capacity:
-        f2.in_()
-        if f2.status() <= f2.servers:
-            escalonador.add(
-                Evento(
-                    tipo="saida",
-                    tempo=TEMPO_GLOBAL,
-                    aleatorio=next_r(f2.min_service, f2.max_service),
-                    fila=2,
-                )
-            )
     else:
-        f2.loss()
+        fila.losses += 1
 
-
-def chegada(fila: Fila, evento: Evento, escalonador: Escalonador):
-    acumula_tempo(evento, fila)
-    if fila.status() < fila.capacity:
-        fila.in_()
-        if fila.status() <= fila.servers:
-            if fila.id == 1:
-                escalonador.add(
-                    Evento(
-                        tipo="passagem",
-                        tempo=evento.tempo,
-                        aleatorio=next_r(fila.min_service, fila.max_service),
-                        fila=fila.id,
-                    )
-                )
-            else:
-                escalonador.add(
-                    Evento(
-                        tipo="saida",
-                        tempo=evento.tempo,
-                        aleatorio=next_r(fila.min_service, fila.max_service),
-                        fila=fila.id,
-                    )
-                )
-    else:
-        fila.loss()
+    # Agenda próxima chegada
     escalonador.add(
         Evento(
             tipo="chegada",
-            tempo=evento.tempo,
-            aleatorio=next_r(fila.min_arrival, fila.max_arrival),
-            fila=fila.id,
+            tempo=next_service_time(fila),
+            fila=evento.fila,
         )
     )
 
 
-def saida(fila: Fila, evento: Evento, escalonador: Escalonador):
-    acumula_tempo(evento, fila)
-    fila.out()
-    if fila.status() >= fila.servers:
+def passagem(
+    evento: Evento,
+    filas: dict[str, Fila],
+    escalonador: Escalonador,
+    network: dict[str, list[tuple[str, float]]],
+):
+    global TEMPO_GLOBAL
+    fila_atual = filas[evento.fila.id]
+
+    acumula_tempo(filas, evento.tempo)
+    TEMPO_GLOBAL = evento.tempo
+
+    # terminou um serviço
+    fila_atual.remove_cliente()
+
+    # se ainda sobra gente na fila além dos servidores em ação,
+    # significa que alguém estava esperando e entra em serviço agora
+    if fila_atual.customers >= fila_atual.servers:
+        escalonador.add(
+            Evento(
+                tipo="passagem",
+                tempo=next_service_time(fila_atual),
+                fila=fila_atual,
+            )
+        )
+
+    # roteamento do cliente que acabou de sair dessa fila
+    destino = sorteia_destino(
+        network=network,
+        filas=filas,
+        origem=fila_atual,
+    )
+
+    if destino.startswith("sa"):
         escalonador.add(
             Evento(
                 tipo="saida",
-                tempo=evento.tempo,
-                aleatorio=next_r(fila.min_service, fila.max_service),
-                fila=fila.id,
-            )
+                tempo=next_service_time(fila_atual),
+                fila=fila_atual,
+            ),
         )
+    else:
+        destino = filas[destino]
+        if not destino.add_cliente():  # perda no destino
+            return
+
+        if destino.customers <= destino.servers:
+            escalonador.add(
+                Evento(
+                    tipo="passagem",
+                    tempo=next_service_time(destino),
+                    fila=destino,
+                )
+            )
 
 
-def next_random(seed=987654321, a=214013, c=2531011, m=98765432112):
-    pseudo = (a * seed + c) % m
-    return float(pseudo) / m
+def sorteia_destino(
+    network: dict[str, list[tuple[str, float]]],
+    filas: dict[str, Fila],
+    origem: Fila,
+) -> str:
+    if network.get(origem.id) is None:
+        raise ValueError(f"Fila {origem.id} não tem destinos definidos.")
+
+    destinos = network[origem.id]
+    prob = random.uniform(0.0, 1.0)
+
+    soma = 0.0
+    for destino, f_prob in destinos:
+        soma += f_prob
+        if prob < soma:
+            return destino
+
+    raise ValueError(
+        f"Erro ao sortear destino: soma das probabilidades {soma} não é 1.0 ou número aleatório {prob} fora de faixa"
+    )
 
 
-def next_r(a: float, b: float):
-    # U(a, b) = a + [(b - a)*x] para gerar um número uniformemente distribuído entre "a" e "b
-    """
-    Gera um número aleatório entre a e b (inclusive)
-    """
-    return a + ((b - a) * next_random())
-
-
-def main(
-    servers1: int,
-    min_arrival1: float,
-    max_arrival1: float,
-    min_service1: float,
-    max_service1: float,
-    capacity1: int,
-    servers2: int,
-    min_arrival2: float,
-    max_arrival2: float,
-    min_service2: float,
-    max_service2: float,
-    capacity2: int,
-    num_iteracoes: int,
+def saida(
+    evento: Evento,
+    filas: dict[str, Fila],
+    escalonador: Escalonador,
 ):
-    # Inicializa o escalonador
+    global TEMPO_GLOBAL
+    fila: Fila = filas[evento.fila.id]
+
+    acumula_tempo(filas, evento.tempo)
+
+    TEMPO_GLOBAL = evento.tempo
+    fila.remove_cliente()
+
+
+def next_service_time(fila: Fila):
+    return TEMPO_GLOBAL + (
+        fila.min_service + (fila.max_service - fila.min_service) * next_rnd()
+    )
+
+
+def main(config):
+    global rndnumbers
+    filas: dict[str, Fila] = {}
+    network: dict[str, list[tuple[str, float]]] = {}  # origin, [target, prob]
+
+    # Pré-processa números aleatórios
+    if "seeds" in config:
+        random.seed(config["seeds"][0])
+        rndnumbers = [
+            random.random() for _ in range(config["rndnumbersPerSeed"])
+        ]  # TODO: need to change this random generator thing
+    else:
+        rndnumbers = config["rndnumbers"]
+
     escalonador = Escalonador()
 
-    # Adicionar o primeiro evento de chegada (qual evento?)
-    escalonador.add(
-        Evento(
-            tipo="chegada",
-            tempo=1.5,
-            aleatorio=0.0,
-            fila=1,
+    # Cria filas
+    for fila_nome, fila_cfg in config["queues"].items():
+        fila = Fila(
+            id=fila_nome,
+            servers=fila_cfg["servers"],
+            capacity=fila_cfg["capacity"],
+            min_arrival=fila_cfg.get("minArrival", 0),
+            max_arrival=fila_cfg.get("maxArrival", 0),
+            min_service=fila_cfg["minService"],
+            max_service=fila_cfg["maxService"],
         )
-    )
+        filas[fila_nome] = fila
 
-    # Inicializa as filas
-    fila_1 = Fila(
-        id=1,
-        servers=servers1,
-        capacity=capacity1,
-        min_arrival=min_arrival1,  # use the arrival interval for queue 1
-        max_arrival=max_arrival1,
-        min_service=min_service1,  # use the service interval for queue 1
-        max_service=max_service1,
-    )
+    # Cria o mapa da rede
+    for regra in config["network"]:
+        source = regra["source"]
+        target = regra["target"]
+        prob = regra["probability"]
+        if source not in network:
+            network[source] = []
+        network[source].append((target, prob))
 
-    fila_2 = Fila(
-        id=2,
-        servers=servers2,
-        capacity=capacity2,
-        min_arrival=min_arrival2,  # even though Fila 2 receives customers from queue 1, you can set this as needed (here we use the service interval)
-        max_arrival=max_arrival2,
-        min_service=min_service2,  # service interval for queue 2
-        max_service=max_service2,
-    )
-    # main loop
-    for _ in range(num_iteracoes):
-        evento = escalonador.next_event()
-        if evento is None:
-            print("Nenhum evento agendado")
-            break
-
-        if evento.tipo == "chegada":
-            chegada(fila_1, evento, escalonador)
-
-        elif evento.tipo == "saida":
-            saida(fila_2, evento, escalonador)
-
-        elif evento.tipo == "passagem":
-            passagem(evento, fila_1, fila_2, escalonador)
-
-    # Exibe os resultados
-    print(f"Fila 1: {fila_1.losses} perdas na fila")
-    print(f"Fila 2: {fila_2.losses} perdas na fila")
-    print("Tempo de simulação: ", TEMPO_GLOBAL)
-
-    for i in range(fila_1.capacity + 1):
-        print(
-            f"Probabilidade de {i} clientes na fila 1: {fila_1.times[i] / TEMPO_GLOBAL}"
+    # Adiciona eventos de chegada
+    for fila_nome, chegada_tempo in config["arrivals"].items():
+        escalonador.add(
+            Evento(
+                tipo="chegada",
+                tempo=chegada_tempo,
+                fila=filas[fila_nome],
+            )
         )
-    for i in range(fila_2.capacity + 1):
-        print(
-            f"Probabilidade de {i} clientes na fila 2: {fila_2.times[i] / TEMPO_GLOBAL}"
-        )
+    try:
+        while True:
+            evento = escalonador.next_event()
 
-    for i in range(fila_1.capacity + 1):
-        print(
-            f"Tempo acumulado de {i} clientes na fila 1: {fila_1.times[i]}",
-        )
+            if evento is None:
+                print("Fim da simulação")
+                break
 
-    for i in range(fila_2.capacity + 1):
-        print(
-            f"Tempo acumulado de {i} clientes na fila 2: {fila_2.times[i]}",
-        )
+            if evento.tipo == "chegada":
+                chegada(
+                    evento=evento,
+                    filas=filas,
+                    escalonador=escalonador,
+                )
+
+            elif evento.tipo == "passagem":  # # make sure the events are
+                passagem(
+                    evento=evento,
+                    filas=filas,
+                    escalonador=escalonador,
+                    network=network,
+                )
+
+            elif evento.tipo == "saida":
+                saida(
+                    evento=evento,
+                    filas=filas,
+                    escalonador=escalonador,
+                )
+    except ValueError as e:
+        print(f"Erro: {e}")
+    except StopIteration:
+        print("Quantidade de números aleatórios finalizada.")
+
+    # Impressão dos resultados
+    print("=" * 57)
+    print("=" * 22 + "    REPORT   " + "=" * 22)
+    print("=" * 57)
+
+    for name in filas:
+        fila = filas[name]
+
+        print("*" * 57)
+        print(f"Queue:   {name} (G/G/{fila.servers}/{fila.capacity})")  # Ex: G/G/1/99
+        print(f"Arrival: {fila.min_arrival} ... {fila.max_arrival}")
+        print(f"Service: {fila.min_service} ... {fila.max_service}")
+        print("*" * 57)
+
+        print(f"{'State':>7} {'Time':>20} {'Probability':>20}")
+        for i in range(len(fila.times)):
+            tempo = fila.times[i]
+            prob = tempo / TEMPO_GLOBAL
+            print(f"{i:7d} {tempo:20.4f} {prob * 100:19.2f}%")
+
+        print(f"\nNumber of losses: {fila.losses}\n")
+
+    print("=" * 57)
+    print(f"Simulation average time: {TEMPO_GLOBAL:.4f}")
+    print("=" * 57)
+
+
+def unknown_tag_handler(loader, tag_suffix, node):
+    return loader.construct_mapping(node)
+
+
+class IgnoreUnknownLoader(yaml.SafeLoader):
+    pass
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Simulação de métodos analíticos")
+    parser = argparse.ArgumentParser(description="Simulador de filas")
     parser.add_argument(
-        "--servers1", type=int, required=True, help="Número de servidores da fila 1"
-    )
-
-    parser.add_argument(
-        "--min_arrival1",
-        type=float,
-        required=True,
-        help="Tempo mínimo entre chegadas da fila 1",
-    )
-    parser.add_argument(
-        "--max_arrival1",
-        type=float,
-        required=True,
-        help="Tempo máximo entre chegadas da fila 1",
-    )
-    parser.add_argument(
-        "--min_service1",
-        type=float,
-        required=True,
-        help="Tempo mínimo de serviço da fila 1",
-    )
-    parser.add_argument(
-        "--max_service1",
-        type=float,
-        required=True,
-        help="Tempo máximo de serviço da fila 1",
-    )
-    parser.add_argument(
-        "--capacity1",
-        type=int,
-        required=True,
-        help="Capacidade máxima da fila 1",
-    )
-    parser.add_argument(
-        "--servers2", type=int, required=True, help="Número de servidores da fila 2"
-    )
-    parser.add_argument(
-        "--min_arrival2",
-        type=float,
-        required=True,
-        help="Tempo mínimo entre chegadas da fila 2",
-    )
-    parser.add_argument(
-        "--max_arrival2",
-        type=float,
-        required=True,
-        help="Tempo máximo entre chegadas da fila 2",
-    )
-    parser.add_argument(
-        "--min_service2",
-        type=float,
-        required=True,
-        help="Tempo mínimo de serviço da fila 2",
-    )
-    parser.add_argument(
-        "--max_service2",
-        type=float,
-        required=True,
-        help="Tempo máximo de serviço da fila 2",
-    )
-    parser.add_argument(
-        "--capacity2",
-        type=int,
-        required=True,
-        help="Capacidade máxima da fila 2",
-    )
-    parser.add_argument(
-        "--num_iteracoes",
-        type=int,
-        required=True,
-        help="Número de iterações para a simulação",
+        "--config", type=str, required=True, help="Arquivo de configuração YAML"
     )
     args = parser.parse_args()
 
-    main(
-        args.servers1,
-        args.min_arrival1,
-        args.max_arrival1,
-        args.min_service1,
-        args.max_service1,
-        args.capacity1,
-        args.servers2,
-        args.min_arrival2,
-        args.max_arrival2,
-        args.min_service2,
-        args.max_service2,
-        args.capacity2,
-        args.num_iteracoes,
-    )
+    path = args.config
+
+    IgnoreUnknownLoader.add_multi_constructor("", unknown_tag_handler)
+
+    with open(path, "r") as f:
+        data = yaml.load(f, Loader=IgnoreUnknownLoader)
+
+    # print(data)
+
+    main(data)

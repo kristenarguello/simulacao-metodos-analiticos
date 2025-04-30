@@ -1,14 +1,15 @@
 from typing import Literal
 
+from fila import Fila
+
 
 class Evento:
     def __init__(
         self,
         tipo: Literal["chegada", "saida", "passagem"],
         tempo: float,
-        aleatorio: float,
-        fila: int = 0,
+        fila: Fila,
     ):
         self.fila = fila
         self.tipo = tipo
-        self.tempo = tempo + aleatorio
+        self.tempo = tempo
