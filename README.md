@@ -1,5 +1,10 @@
 # simulacao de filas
 
+Organização do código:
+main.py = código principal da simulação
+evento.py, fila.py, escalonador.py = classes
+
+Como rodar:
 1. Instalar dependências
 ```
 pip install -r requirements.txt
