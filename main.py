@@ -248,14 +248,30 @@ def main(config):
         print("Quantidade de números aleatórios finalizada.")
 
     # Impressão dos resultados
+    print("=" * 57)
+    print("=" * 22 + "    REPORT   " + "=" * 22)
+    print("=" * 57)
+
     for name in filas:
         fila = filas[name]
-        print(f"Fila {name}: {fila.losses} perdas na fila")
-        print(f"Tempo de simulação: {TEMPO_GLOBAL}")
-        for i in range(11):
-            if i >= len(fila.times):
-                break
-            print(f"Probabilidade de {i} clientes: {fila.times[i] / TEMPO_GLOBAL}")
+
+        print("*" * 57)
+        print(f"Queue:   {name} (G/G/{fila.servers}/{fila.capacity})")  # Ex: G/G/1/99
+        print(f"Arrival: {fila.min_arrival} ... {fila.max_arrival}")
+        print(f"Service: {fila.min_service} ... {fila.max_service}")
+        print("*" * 57)
+
+        print(f"{'State':>7} {'Time':>20} {'Probability':>20}")
+        for i in range(len(fila.times)):
+            tempo = fila.times[i]
+            prob = tempo / TEMPO_GLOBAL
+            print(f"{i:7d} {tempo:20.4f} {prob * 100:19.2f}%")
+
+        print(f"\nNumber of losses: {fila.losses}\n")
+
+    print("=" * 57)
+    print(f"Simulation average time: {TEMPO_GLOBAL:.4f}")
+    print("=" * 57)
 
 
 def unknown_tag_handler(loader, tag_suffix, node):
