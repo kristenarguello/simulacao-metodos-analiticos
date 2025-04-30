@@ -214,8 +214,6 @@ def main(config):
     try:
         while True:
             evento = escalonador.next_event()
-            # only queues 2 and 3 can have saida events
-            # queue one
 
             if evento is None:
                 print("Fim da simulação")
